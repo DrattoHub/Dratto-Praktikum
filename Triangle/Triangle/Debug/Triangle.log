@@ -1,4 +1,4 @@
-﻿Build started 5.4.2012 22:03:19.
+﻿Build started 12.4.2012 20:57:56.
      1>Project "D:\faks\3_letnik\2_polovica\diplomska\Triangle\Triangle\Triangle.vcxproj" on node 2 (build target(s)).
      1>InitializeBuildStatus:
          Creating "Debug\Triangle.unsuccessfulbuild" because "AlwaysCreate" was specified.
@@ -25,4 +25,4 @@
 
 Build succeeded.
 
-Time Elapsed 00:00:01.49
+Time Elapsed 00:00:00.93
