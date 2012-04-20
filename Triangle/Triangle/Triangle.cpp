@@ -28,6 +28,8 @@ GLFrame cameraFrame;
 GLBatch floorBatch;
 GLTriangleBatch torusBatch;
 
+GLuint	uiTextures[1];
+
 
 ///////////////////////////////////////////////////
 // Screen changes size or is initialized
@@ -57,6 +59,38 @@ void SpecialKeys(int key, int x, int y)
 		cameraFrame.RotateWorld(angular, 0.0f, 1.0f, 0.0f);
 	if(key==GLUT_KEY_RIGHT)
 		cameraFrame.RotateWorld(-angular, 0.0f, 1.0f, 0.0f);
+}
+
+bool LoadTGATexture(const char *szFileName, GLenum minFilter, GLenum magFilter, GLenum wrapMode)
+{
+	GLbyte *pBits;
+	int nWidth, nHeight, nComponents;
+	GLenum eFormat;
+	
+	// Read the texture bits
+	pBits = gltReadTGABits(szFileName, &nWidth, &nHeight, &nComponents, &eFormat);
+	if(pBits == NULL) 
+		return false;
+	
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrapMode);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrapMode);
+	
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minFilter);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, magFilter);
+		
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_COMPRESSED_RGB, nWidth, nHeight, 0,
+				 eFormat, GL_UNSIGNED_BYTE, pBits);
+	
+    free(pBits);
+
+    if(minFilter == GL_LINEAR_MIPMAP_LINEAR || 
+       minFilter == GL_LINEAR_MIPMAP_NEAREST ||
+       minFilter == GL_NEAREST_MIPMAP_LINEAR ||
+       minFilter == GL_NEAREST_MIPMAP_NEAREST)
+        glGenerateMipmap(GL_TEXTURE_2D);
+            
+	return true;
 }
 
 //void keyPressed (unsigned char key, int x, int y)
@@ -101,17 +135,35 @@ void SetupRC()
 
 	gltMakeTorus(torusBatch, 0.4f, 0.15f, 30, 30);
 
-	floorBatch.Begin(GL_LINES, 324);
-    for(GLfloat x = -20.0; x <= 20.0f; x+= 0.5) {
-        floorBatch.Vertex3f(x, -0.55f, 20.0f);
-        floorBatch.Vertex3f(x, -0.55f, -20.0f);
-        
-        floorBatch.Vertex3f(20.0f, -0.55f, x);
-        floorBatch.Vertex3f(-20.0f, -0.55f, x);
-        }
-    floorBatch.End();    
+	// Make the solid ground
+	GLfloat texSize = 10.0f;
+	floorBatch.Begin(GL_TRIANGLE_FAN, 4, 1);
+	floorBatch.MultiTexCoord2f(0, 0.0f, 0.0f);
+	floorBatch.Vertex3f(-20.0f, -0.41f, 20.0f);
+	
+	floorBatch.MultiTexCoord2f(0, texSize, 0.0f);
+    floorBatch.Vertex3f(20.0f, -0.41f, 20.0f);
+	
+	floorBatch.MultiTexCoord2f(0, texSize, texSize);
+	floorBatch.Vertex3f(20.0f, -0.41f, -20.0f);
+	
+	floorBatch.MultiTexCoord2f(0, 0.0f, texSize);
+	floorBatch.Vertex3f(-20.0f, -0.41f, -20.0f);
+	floorBatch.End();
+
+	glGenTextures(1, uiTextures);
+	
+	// Load the Marble
+	glBindTexture(GL_TEXTURE_2D, uiTextures[0]);
+	LoadTGATexture("marble.tga", GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR, GL_REPEAT);
+
 }
 
+
+void ShutdownRC(void)
+    {
+    glDeleteTextures(1, uiTextures);
+    }
 
 // Called to draw scene
 void RenderScene(void)
@@ -141,9 +193,20 @@ void RenderScene(void)
 	//transformiranje koordinate luèi v glede na kamero
 	m3dTransformVector4(vLightEyePos, vLightPos, mCamera);
 
-	//izriši tla
-	shaderManager.UseStockShader(GLT_SHADER_FLAT, transformPipeline.GetModelViewProjectionMatrix(), vFloorBarva);
+	////izriši tla
+	//shaderManager.UseStockShader(GLT_SHADER_FLAT, transformPipeline.GetModelViewProjectionMatrix(), vFloorBarva);
+	//floorBatch.Draw();
+
+	glBindTexture(GL_TEXTURE_2D, uiTextures[0]);
+
+	static GLfloat vFloorColor[] = { 1.0f, 1.0f, 1.0f, 0.75f};
+	shaderManager.UseStockShader(GLT_SHADER_TEXTURE_MODULATE,
+								 transformPipeline.GetModelViewProjectionMatrix(),
+								 vFloorColor,
+								 0);
+	
 	floorBatch.Draw();
+
 
 	//nariši krof
 	modelViewMatrix_Stack.Translate(0.0f, 0.0f, -4.5f);
@@ -160,6 +223,8 @@ void RenderScene(void)
 
 	glutPostRedisplay();
 }
+
+
 
 
 
@@ -187,5 +252,6 @@ int main(int argc, char* argv[])
 	SetupRC();
 
 	glutMainLoop();
+	ShutdownRC();
 	return 0;
 }
