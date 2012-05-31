@@ -22,6 +22,9 @@ static GLfloat vWhite[] = { 1.0f, 1.0f, 1.0f, 1.0f };
 static GLfloat vBlack[] = { 0.0f, 0.0f, 0.0f, 1.0f };
 static GLfloat vGrey[] =  { 0.5f, 0.5f, 0.5f, 1.0f };
 
+static GLfloat vMirrorBarva[]= { 0.0f, 1.0f, 0.0f, 1.0f };
+
+
 M3DVector4f vLightPos={5.0f, 10.0f, 5.0f, 1.0f};   //pozicija luci
 
 static const GLenum windowBuff[]={GL_BACK_LEFT};
@@ -49,6 +52,7 @@ GLFrame cameraFrame;  //frame za kamero
 GLFrame mirrorFrame; //frame za ogledalo
 
 GLBatch floorBatch;
+GLBatch cubeBatch;
 GLTriangleBatch torusBatch;
 GLTriangleBatch sphereBatch;
 GLBatch mirrorBatch;
@@ -59,6 +63,7 @@ GLuint fboName;
 GLuint mirrorTexture;
 GLuint depthBufferName;
 
+bool RTTactive=true;
 
 
 ///////////////////////////////////////////////////
@@ -79,6 +84,14 @@ void ChangeSize(int width, int height)
 
 void SpecialKeys(int key, int x, int y)
 {
+
+	/*static CStopWatch cameraTimer;
+	float fTime = cameraTimer.GetElapsedSeconds();
+	cameraTimer.Reset(); 
+
+	float linear = fTime * 3.0f;
+	float angular = fTime * float(m3dDegToRad(60.0f));*/
+
 	float linear=0.40f;
 	float angular=float(m3dDegToRad(2.5f));
 
@@ -94,7 +107,25 @@ void SpecialKeys(int key, int x, int y)
 	if(key==GLUT_KEY_RIGHT)
 		cameraFrame.RotateWorld(-angular, 0.0f, 1.0f, 0.0f);
 
-	 
+	if(key==GLUT_KEY_F1)
+	{
+		RTTactive=!RTTactive;
+		
+		if(RTTactive)
+		{
+			vMirrorBarva[0]=0.0;
+			vMirrorBarva[1]=1.0;
+			vMirrorBarva[2]=0.0;
+		}
+		else
+		{
+			vMirrorBarva[0]=0.5;
+			vMirrorBarva[1]=0.5;
+			vMirrorBarva[2]=0.5;
+		}
+	}
+
+	//glutPostRedisplay();
 }
 
 bool LoadTGATexture(const char *szFileName, GLenum minFilter, GLenum magFilter, GLenum wrapMode)
@@ -195,21 +226,6 @@ void makeMirrorAndBorder()
 }
 
 
-//void keyPressed (unsigned char key, int x, int y)
-//{
-//	float linear=0.1f;
-//	float angular=float(m3dDegToRad(5.0f));
-//
-//	if(key=='w')
-//		cameraFrame.MoveForward(linear);
-//	if(key=='s')
-//		cameraFrame.MoveForward(-linear);
-//	if(key=='a')
-//		cameraFrame.RotateWorld(angular, 0.0f, 1.0f, 0.0f);
-//	if(key=='d')
-//		cameraFrame.RotateWorld(-angular, 0.0f, 1.0f, 0.0f);
-//}
-
 ///////////////////////////////////////////////////////////////////////////////
 // This function does any needed initialization on the rendering context. 
 // This is the first opportunity to do any OpenGL related tasks.
@@ -240,6 +256,7 @@ void SetupRC()
 	gltMakeTorus(torusBatch, 0.4f, 0.15f, 30, 30); // napolni batch s krofom
 
 	gltMakeSphere(sphereBatch,0.1f,40,20);   //napolni (triangle)batch s kroglo
+	gltMakeCube(cubeBatch, 0.2);
 
 	// Make the solid ground
 	GLfloat texSize = 15.0f;
@@ -332,8 +349,17 @@ void DrawWorld(GLfloat yRot)
 	modelViewMatrix_Stack.GetMatrix(mCamera);
 	
 	M3DVector4f vLightEyePos;
+
 	//transformiranje koordinate luèi v glede na kamero
 	m3dTransformVector4(vLightEyePos, vLightPos, mCamera);
+
+
+	//izrisi kroglo tam tam kjer je luc
+	modelViewMatrix_Stack.PushMatrix();
+	modelViewMatrix_Stack.Translatev(vLightPos);
+		shaderManager.UseStockShader(GLT_SHADER_FLAT, transformPipeline.GetModelViewProjectionMatrix(), vWhite);
+		sphereBatch.Draw();
+	modelViewMatrix_Stack.PopMatrix();
 
 	////izriši tla
 	//shaderManager.UseStockShader(GLT_SHADER_FLAT, transformPipeline.GetModelViewProjectionMatrix(), vFloorBarva);
@@ -353,12 +379,22 @@ void DrawWorld(GLfloat yRot)
 	//nariši krof
 
 	modelViewMatrix_Stack.Translate(0.0f, 0.2f, -2.5f);
-	modelViewMatrix_Stack.Rotate(yRot,1.0f, 1.0f, 1.0f);
-	
+	modelViewMatrix_Stack.Rotate(yRot, 1.0f, 1.0f, 1.0f);
+	//modelViewMatrix_Stack.Scale(1.0f, 1.0f, 0.1f);
 
 	//uporaba ze narejnega point light diffuse shaderja
-	shaderManager.UseStockShader(GLT_SHADER_POINT_LIGHT_DIFF, transformPipeline.GetModelViewMatrix(), transformPipeline.GetProjectionMatrix(),vLightEyePos,vKrofBarva);
+	//shaderManager.UseStockShader(GLT_SHADER_POINT_LIGHT_DIFF, transformPipeline.GetModelViewMatrix(), transformPipeline.GetProjectionMatrix(),vLightEyePos,vKrofBarva);
+
+
+//	glBindTexture(GL_TEXTURE_2D, uiTextures[2]);
+	shaderManager.UseStockShader(GLT_SHADER_POINT_LIGHT_DIFF,
+								 modelViewMatrix_Stack.GetMatrix(),
+								 transformPipeline.GetProjectionMatrix(),
+								 vLightEyePos, 
+								 vKrofBarva,
+								 0);
 	torusBatch.Draw();
+
 	modelViewMatrix_Stack.PopMatrix();
 	
 	//modelViewMatrix_Stack.Translate(1.0f, 0.0f, -2.0f);
@@ -374,13 +410,12 @@ void DrawWorld(GLfloat yRot)
 								 transformPipeline.GetProjectionMatrix(),
 								 vLightEyePos, 
 								 vWhite,
-								 0);
+							     0);
 	sphereBatch.Draw();
 
 
 	modelViewMatrix_Stack.PopMatrix();
 	//modelViewMatrix_Stack.PopMatrix();
-
 }
 // Called to draw scene
 void RenderScene(void)
@@ -392,6 +427,7 @@ void RenderScene(void)
 	// pocisti barvo in depth bufferje
 //	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
+
 	M3DVector3f vCameraPos;
 	M3DVector3f vCameraForward;
 	M3DVector3f vMirrorPos;
@@ -400,39 +436,43 @@ void RenderScene(void)
 	cameraFrame.GetOrigin(vCameraPos);
 	cameraFrame.GetForwardVector(vCameraForward);
 
-	// nastavi pozicijo za mirror frame
-	vMirrorPos[0] = 0.0;
-	vMirrorPos[1] = 0.1f;
-	vMirrorPos[2] = -6.0f; // view pos is actually behind mirror
-	mirrorFrame.SetOrigin(vMirrorPos);
+	if(RTTactive) //ce je vklopljeno renderiranje na teksturo
+	{
+		// nastavi pozicijo za mirror frame
+		vMirrorPos[0] = 0.0;
+		vMirrorPos[1] = 0.1f;
+		vMirrorPos[2] = -6.0f; // view pos je za ogledalom
+		mirrorFrame.SetOrigin(vMirrorPos);
 
-	// Calculate direction of mirror frame (camera)
-	// Because the position of the mirror is known relative to the origin
-	// find the direction vector by adding the mirror offset to the vector
-	// of the viewer-origin
-	vMirrorForward[0] = vCameraPos[0];
-	vMirrorForward[1] = vCameraPos[1];
-	vMirrorForward[2] = (vCameraPos[2] + 5);
-	m3dNormalizeVector3(vMirrorForward);
-	mirrorFrame.SetForwardVector(vMirrorForward);
+		// Calculate direction of mirror frame (camera)
+		// Because the position of the mirror is known relative to the origin
+		// find the direction vector by adding the mirror offset to the vector
+		// of the viewer-origin
+		vMirrorForward[0] = vCameraPos[0];
+		vMirrorForward[1] = vCameraPos[1];
+		vMirrorForward[2] = (vCameraPos[2] + 5);
+		m3dNormalizeVector3(vMirrorForward);
+		mirrorFrame.SetForwardVector(vMirrorForward);
 	
-	// first render from the mirrors perspective
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fboName);
-	glDrawBuffers(1, fboBuffs);
-	glViewport(0, 0, mirrorTexWidth, mirrorTexHeight);
+		// first render from the mirrors perspective
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fboName);
+		glDrawBuffers(1, fboBuffs);
+		glViewport(0, 0, mirrorTexWidth, mirrorTexHeight);
 
-	// Draw scene from the perspective of the mirror camera
-	modelViewMatrix_Stack.PushMatrix();	
-		M3DMatrix44f mMirrorView;
-		mirrorFrame.GetCameraMatrix(mMirrorView);
-		modelViewMatrix_Stack.MultMatrix(mMirrorView);
+		// Draw scene from the perspective of the mirror camera
+		modelViewMatrix_Stack.PushMatrix();	
+			M3DMatrix44f mMirrorView;
+			mirrorFrame.GetCameraMatrix(mMirrorView);
+			modelViewMatrix_Stack.MultMatrix(mMirrorView);
 
-		// Flip the mirror camera horizontally for the reflection
-		modelViewMatrix_Stack.Scale(-1.0f, 1.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		DrawWorld(yRot);
+			// Flip the mirror camera horizontally for the reflection
+			modelViewMatrix_Stack.Scale(-1.0f, 1.0f, 1.0f);
 
-		modelViewMatrix_Stack.PopMatrix();
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+			DrawWorld(yRot);
+
+			modelViewMatrix_Stack.PopMatrix();
+	}
 
 		// Reset FBO. Draw world again from the real cameras perspective
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
@@ -461,12 +501,10 @@ void RenderScene(void)
 			}
 			mirrorBatch.Draw();
 	
-			/*shaderManager.UseStockShader(GLT_SHADER_FLAT, transformPipeline.GetModelViewProjectionMatrix(), vGrey);
-			mirrorBorderBatch.Draw();*/
+			shaderManager.UseStockShader(GLT_SHADER_FLAT, transformPipeline.GetModelViewProjectionMatrix(), vMirrorBarva);
+			mirrorBorderBatch.Draw();
 		modelViewMatrix_Stack.PopMatrix();
 	modelViewMatrix_Stack.PopMatrix();
-
-
 	/*
 	M3DMatrix44f mRotationMatrix;
 	m3dRotationMatrix44(mRotationMatrix, m3dDegToRad(45), 0.0f, 0.0f, 1.0f);
@@ -482,6 +520,8 @@ void RenderScene(void)
 	//modelViewMatrix_Stack.PopMatrix();
 
 	// Perform the buffer swap to display back buffer
+
+
 	glutSwapBuffers();
 
 	glutPostRedisplay();
@@ -508,7 +548,6 @@ int main(int argc, char* argv[])
 		}
 	
 	glutSpecialFunc(SpecialKeys);
-	//glutKeyboardFunc(keyPressed);
 	SetupRC();
 
 	glutMainLoop();
